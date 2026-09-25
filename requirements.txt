@@ -1,0 +1,7 @@
+pandas>=2.0
+numpy
+geopandas>=0.14
+pyarrow
+matplotlib
+scikit-learn
+jupyter
