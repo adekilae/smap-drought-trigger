@@ -1,61 +1,44 @@
-# SMAP Soil Moisture Drought Trigger for US Counties
+# SMAP soil-moisture dryness trigger for U.S. Drought Monitor onset
 
-A reproducible Python workflow that turns daily **SMAP 9 km satellite soil moisture** into a simple **county-level drought early-warning trigger** for the contiguous United States, and tests how well it anticipates drought recorded by the **US Drought Monitor (USDM)**.
+Code for the manuscript by F. A. Adekilae on whether SMAP surface soil-moisture anomalies give early warning of county-level drought development in the U.S. Drought Monitor (USDM), 2016–2020.
 
-> **Status:** exploratory research workflow (work in progress). Results are preliminary and not peer-reviewed.
+## Notebooks
 
-## What it does
-
-1. **Cleans SMAP data**: reads one CSV per year (exported from Google Earth Engine), keeps plausible values, and saves compact Parquet files.
-2. **Maps pixels to counties**: assigns each 9 km pixel to the county containing its center.
-3. **Aggregates to counties**: computes county-daily mean soil moisture.
-4. **Removes the seasonal cycle**: builds a day-of-year climatology (±15-day window) per county and computes z-score anomalies.
-5. **Flags dryness**: triggers when at least 3 of the last 5 calendar days have z ≤ −1.
-6. **Evaluates skill**: compares the dryness score and trigger with future USDM drought events at 7–60 day lead times, using ROC-AUC, PR-AUC, hit rate, and false-alarm ratio, with an *onset-only* option that excludes counties already in drought.
-
-## Repository contents
-
-| File | Description |
+| Notebook | What it does |
 |---|---|
-| `smap_drought_trigger.ipynb` | Full workflow, from raw CSVs to skill scores and figures |
-| `requirements.txt` | Python packages needed |
-| `LICENSE` | MIT License |
+| `smap_drought_trigger.ipynb` | Original processing: SMAP export from Google Earth Engine, county aggregation, anomaly (z-score) computation, and the dryness trigger. |
+| `SMAP_corrected_lead_windows.ipynb` | Verification analysis used for the revised manuscript (sections below). |
+
+### `SMAP_corrected_lead_windows.ipynb`
+
+1–7. **Corrected lead windows.** Event labels are DSCI ≥ 200 on any USDM map date in (t, t+L] days (Eq. 7), and the trigger is ≥ 3 dry days (z ≤ −1) among calendar days t−4 to t (Eq. 6). Version A reproduces the original method; version C matches the Methods text.
+8. **Onset-only and continuous score.** Verifies the binary trigger and the continuous dryness score (−z) on all cases and on counties below DSCI 200 at initialization.
+9. **Strict onset with uncertainty.** Requires no DSCI ≥ 200 in the preceding 14, 28 or 42 days (28 days is primary), and gives county-cluster bootstrap 95% confidence intervals (1,000 resamples, seed 2026).
+10. **Persistence baseline.** Compares initial DSCI alone, SMAP alone, and both combined, and reports SMAP's ROC–AUC within starting-DSCI groups (0, 1–99, 100–149, 150–199), with the number of onsets in each group.
+
+Lead windows: 7, 14, 21, 30, 45 and 60 days.
+
+## Running it
+
+The notebooks run in Google Colab (**Runtime → Run all**) and read from Google Drive:
+
+```
+MyDrive/SMAP_preprocessed/
+├── SMAP_county_daily_2016_2020_with_anom.parquet   # county_fips, date, sm_z
+└── USDM/USDM_county_2016_2020.csv.csv              # FIPS, MapDate, DSCI
+```
+
+Results are written to `MyDrive/SMAP_preprocessed/Corrected_LeadWindow_Results/`. To run elsewhere, remove the Drive-mount lines in section 1 and set `out_base` to your data folder.
+
+Python packages: `numpy`, `pandas`, `pyarrow`, `scikit-learn`, `matplotlib` (see `requirements.txt`).
 
 ## Data
 
-Data files are **not** included in this repository. Place them in a `data/` folder (or edit the paths in the configuration cell).
+- SMAP: NASA SMAP soil moisture, accessed through Google Earth Engine.
+- USDM: county statistics (DSCI) from the U.S. Drought Monitor, https://droughtmonitor.unl.edu.
 
-| Input | Expected file | Source |
-|---|---|---|
-| SMAP soil moisture, 9 km, daily | `data/SMAP_9km_pixels_<year>.csv` with columns `date`, `lat`, `lon`, `sm` | NASA SMAP via Google Earth Engine (**add the exact collection ID**, e.g. `NASA/SMAP/SPL3SMP_E/...`) |
-| USDM county statistics, weekly | `data/USDM_county_2016_2020.csv` with columns `FIPS`, `MapDate`, `DSCI` | [US Drought Monitor data download](https://droughtmonitor.unl.edu/DmData/DataDownload.aspx) |
-| US county boundaries | downloaded automatically | [US Census cartographic boundary files (2020)](https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html) |
+The derived county-level tables are available from the author on reasonable request.
 
-## How to run
+## Contact
 
-**Locally**
-```bash
-pip install -r requirements.txt
-jupyter notebook smap_drought_trigger.ipynb
-```
-
-**Google Colab:** open the notebook in Colab, uncomment the Google Drive cell in Section 1, and point `DATA_DIR` and `OUT_DIR` to your Drive folders.
-
-All settings (years, thresholds, lead times) are in the configuration cell at the top.
-
-## Method notes and limitations
-
-- **Drought event definition.** An event is `DSCI ≥ 200`. The USDM Drought Severity and Coverage Index is area-weighted (0–500), so 200 corresponds to the whole county in D1. Partial-area droughts can fall below it. For "D1 or worse" by area, USDM's percent-area county statistics are a stricter alternative.
-- **Quality control.** Only a plausible-range filter (0–0.7 m³/m³) is applied. SMAP retrieval-quality, frozen-ground, and open-water flags should be applied when exporting from Earth Engine.
-- **County coverage.** Counties smaller than a 9 km pixel may receive no pixel center and are omitted.
-- **Climatology length.** Anomalies are relative to the years analyzed (2016–2020 by default), which is short, and the same years are used for evaluation.
-- **Missing days.** SMAP 9 km has gaps; the trigger uses calendar-day windows, and each weekly USDM date is matched to the latest SMAP day within 3 days.
-
-## Author
-
-**Frank Anyoka Adekilae**, PhD student, Soil Hydrology and Remote Sensing (SHaRE) Lab, School of Plant, Environmental, and Soil Sciences, Louisiana State University
-Website: [adekilae.github.io](https://adekilae.github.io) · Email: FAdekilae@agcenter.lsu.edu
-
-## License
-
-Code released under the [MIT License](LICENSE).
+Frank Anyoka Adekilae — fadekilae@agcenter.lsu.edu
